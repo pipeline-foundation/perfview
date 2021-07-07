@@ -25,22 +25,24 @@ jobs:
         with:
           queries: security-and-quality
 
-      - name: Perform CodeQL Autobuild
-        uses: github/codeql-action/autobuild@v1
+      - name: Build solution
+        shell: pwsh
+        run: |
+          dotnet sln PerfView.sln remove `
+          src\LinuxEvent.Tests\LinuxTracing.Tests.csproj `
+          src\TraceEvent\Ctf\CtfTracing.Tests\CtfTracing.Tests.csproj `
+          src\TraceEvent\TraceEvent.Tests\TraceEvent.Tests.csproj `
+          src\PerfView.Tests\PerfView.Tests.csproj `
+          src\PerfView.TestUtilities\PerfView.TestUtilities.csproj
 
-      # - name: Build solution
-      #   shell: pwsh
-      #   run: |
-      #     dotnet sln .sln remove .csproj
+          # dotnet clean PerfView.sln --configuration Release
 
-      #     dotnet clean .sln --configuration Release
+          dotnet restore PerfView.sln
 
-      #     dotnet restore .sln
-
-      #     dotnet build .sln `
-      #     --configuration Release `
-      #     --no-incremental `
-      #     -property:UseSharedCompilation=false
+          dotnet build PerfView.sln `
+          --configuration Release `
+          --no-incremental `
+          -property:UseSharedCompilation=false
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
