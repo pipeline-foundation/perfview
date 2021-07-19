@@ -18,7 +18,7 @@
 		"vscode-icons-team.vscode-icons",
 		"editorconfig.editorconfig"
 	],
-	"postCreateCommand": "",
+	"postCreateCommand": "nuget restore",
 	"build": {
 		"dockerfile": "Dockerfile"
 	}
