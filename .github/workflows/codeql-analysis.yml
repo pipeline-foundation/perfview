@@ -35,8 +35,6 @@ jobs:
           src\PerfView.Tests\PerfView.Tests.csproj `
           src\PerfView.TestUtilities\PerfView.TestUtilities.csproj
 
-          # dotnet clean PerfView.sln --configuration Release
-
           dotnet restore PerfView.sln
 
           dotnet build PerfView.sln `
