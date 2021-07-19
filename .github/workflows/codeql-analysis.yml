@@ -10,12 +10,12 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v1
         with:
-          dotnet-version: 5.0.301
+          dotnet-version: 2.1.505
 
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -42,7 +42,6 @@ jobs:
           dotnet build PerfView.sln `
           --configuration Release `
           --no-incremental `
-          -property:UseSharedCompilation=false
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
