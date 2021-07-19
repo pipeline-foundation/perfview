@@ -25,21 +25,13 @@ jobs:
         with:
           queries: security-and-quality
 
+      - name: Restore solution
+        shell: pwsh
+        run: nuget restore PerfView.sln
+
       - name: Build solution
         shell: pwsh
-        run: |
-          dotnet sln PerfView.sln remove `
-          src\LinuxEvent.Tests\LinuxTracing.Tests.csproj `
-          src\TraceEvent\Ctf\CtfTracing.Tests\CtfTracing.Tests.csproj `
-          src\TraceEvent\TraceEvent.Tests\TraceEvent.Tests.csproj `
-          src\PerfView.Tests\PerfView.Tests.csproj `
-          src\PerfView.TestUtilities\PerfView.TestUtilities.csproj
-
-          dotnet restore PerfView.sln
-
-          dotnet build PerfView.sln `
-          --configuration Release `
-          --no-incremental `
+        run: msbuild PerfView.sln /p:Configuration=Debug
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
