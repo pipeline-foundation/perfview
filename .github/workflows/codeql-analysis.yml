@@ -17,6 +17,9 @@ jobs:
         with:
           dotnet-version: 2.1.505
 
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1
+
       - name: Checkout repository
         uses: actions/checkout@v2
 
