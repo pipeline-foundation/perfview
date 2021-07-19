@@ -29,11 +29,9 @@ jobs:
           queries: security-and-quality
 
       - name: Restore solution
-        shell: pwsh
         run: nuget restore PerfView.sln
 
       - name: Build solution
-        shell: pwsh
         run: msbuild PerfView.sln /p:Configuration=Debug
 
       - name: Perform CodeQL Analysis
