@@ -16,6 +16,7 @@
     <PackageVersion Include="Azure.Core" Version="1.38.0" />
     <PackageVersion Include="Azure.Identity" Version="1.11.4" />
     <PackageVersion Include="MicroBuild.Core" Version="0.3.1" />
+    <PackageVersion Include="Microsoft.Bcl.HashCode" Version="6.0.0" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.510501" />
     <PackageVersion Include="Microsoft.Identity.Client" Version="4.74.1" />
     <PackageVersion Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.74.1" />
@@ -35,6 +36,8 @@
     <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageVersion Include="System.Security.Cryptography.Algorithms" Version="4.3.1" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="9.0.8" />
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.8" />
+    <PackageVersion Include="System.IO.Pipelines" Version="9.0.8" />
     <PackageVersion Include="System.Text.Encodings.Web" Version="9.0.8" />
     <PackageVersion Include="System.Text.Json" Version="9.0.8" />
     <PackageVersion Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
