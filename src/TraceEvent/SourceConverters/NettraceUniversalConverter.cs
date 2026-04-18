@@ -27,6 +27,15 @@ namespace Microsoft.Diagnostics.Tracing.SourceConverters
 
         public void BeforeProcess(TraceLog traceLog, TraceEventDispatcher source)
         {
+            // Extract system page size for ELF RVA calculations.
+            if (source is EventPipeEventSource eventPipeSource)
+            {
+                eventPipeSource.HeadersDeserialized += delegate ()
+                {
+                    traceLog.systemPageSize = eventPipeSource._systemPageSize;
+                };
+            }
+
             UniversalSystemTraceEventParser universalSystemParser = new UniversalSystemTraceEventParser(source);
             universalSystemParser.ExistingProcess += delegate (ProcessCreateTraceData data)
             {
@@ -53,7 +62,8 @@ namespace Microsoft.Diagnostics.Tracing.SourceConverters
                 }
                 processes.Add(process);
 
-                if (!string.IsNullOrEmpty(data.FileName) && data.FileName.StartsWith(DotnetJittedCodeMappingName, StringComparison.Ordinal))
+                string fileName = data.FileName;
+                if (!string.IsNullOrEmpty(fileName) && fileName.StartsWith(DotnetJittedCodeMappingName, StringComparison.Ordinal))
                 {
                     // Don't create a module for jitted code.
                     // These will be created for each jitted code symbol.
@@ -61,7 +71,7 @@ namespace Microsoft.Diagnostics.Tracing.SourceConverters
                 }
 
                 _mappingMetadata.TryGetValue(data.MetadataId, out ProcessMappingMetadataTraceData metadata);
-                TraceModuleFile moduleFile = process.LoadedModules.UniversalMapping(data, metadata);
+                TraceModuleFile moduleFile = process.LoadedModules.UniversalMapping(fileName, data.StartAddress, data.EndAddress, data.TimeStampQPC, metadata);
             };
             universalSystemParser.ProcessMappingMetadata += delegate (ProcessMappingMetadataTraceData data)
             {
