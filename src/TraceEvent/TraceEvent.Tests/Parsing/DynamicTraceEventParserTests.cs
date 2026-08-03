@@ -1,10 +1,16 @@
-﻿using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
+
 using System;
 using System.IO;
 using System.Security;
 using System.Text;
+
 using Xunit;
+
+using FormatHint = Microsoft.Diagnostics.Tracing.Parsers.TdhFormatter.FormatHint;
+using TdhInputType = Microsoft.Diagnostics.Tracing.Parsers.RegisteredTraceEventParser.TdhInputType;
+using TdhOutputType = Microsoft.Diagnostics.Tracing.Parsers.RegisteredTraceEventParser.TdhOutputType;
 
 namespace TraceEventTests
 {
@@ -153,6 +159,95 @@ namespace TraceEventTests
             {
                 Directory.Delete(outputDirectory, recursive: true);
             }
+        }
+
+        [Theory]
+        [InlineData(FormatHint.None, TdhInputType.Int32, TdhOutputType.Null)]
+        [InlineData(FormatHint.None, TdhInputType.Int32, TdhOutputType.Int)]
+        [InlineData(FormatHint.None, TdhInputType.Pointer, TdhOutputType.HexBinary)]
+        [InlineData(FormatHint.Hex, TdhInputType.UInt8, TdhOutputType.HexInt8)]
+        [InlineData(FormatHint.Hex, TdhInputType.Int16, TdhOutputType.HexInt16)]
+        [InlineData(FormatHint.Hex, TdhInputType.Int32, TdhOutputType.HexInt32)]
+        [InlineData(FormatHint.Hex, TdhInputType.UInt64, TdhOutputType.HexInt64)]
+        // Input type of pointer overrides hex formatting on output
+        [InlineData(FormatHint.Pointer, TdhInputType.Pointer, TdhOutputType.HexInt8)]
+        [InlineData(FormatHint.Pointer, TdhInputType.Pointer, TdhOutputType.HexInt16)]
+        [InlineData(FormatHint.Pointer, TdhInputType.Pointer, TdhOutputType.HexInt32)]
+        [InlineData(FormatHint.Pointer, TdhInputType.Pointer, TdhOutputType.HexInt64)]
+        [InlineData(FormatHint.Pid, TdhInputType.UInt32, TdhOutputType.Pid)]
+        [InlineData(FormatHint.Tid, TdhInputType.UInt32, TdhOutputType.Tid)]
+        [InlineData(FormatHint.Port, TdhInputType.UInt16, TdhOutputType.Port)]
+        [InlineData(FormatHint.IPv4, TdhInputType.UInt32, TdhOutputType.Ipv4)]
+        [InlineData(FormatHint.IPv6, TdhInputType.Binary, TdhOutputType.Ipv6)]
+        [InlineData(FormatHint.SocketAddress, TdhInputType.Binary, TdhOutputType.SocketAddress)]
+        [InlineData(FormatHint.GenericError, TdhInputType.Int32, TdhOutputType.ErrorCode)]
+        [InlineData(FormatHint.GenericError, TdhInputType.UInt32, TdhOutputType.ErrorCode)]
+        [InlineData(FormatHint.Win32Error, TdhInputType.Int32, TdhOutputType.Win32Error)]
+        [InlineData(FormatHint.Win32Error, TdhInputType.UInt32, TdhOutputType.Win32Error)]
+        [InlineData(FormatHint.NtStatus, TdhInputType.Int32, TdhOutputType.NtStatus)]
+        [InlineData(FormatHint.NtStatus, TdhInputType.UInt32, TdhOutputType.NtStatus)]
+        [InlineData(FormatHint.HResult, TdhInputType.Int32, TdhOutputType.HResult)]
+        [InlineData(FormatHint.HResult, TdhInputType.UInt32, TdhOutputType.HResult)]
+        [InlineData(FormatHint.Pointer, TdhInputType.UInt32, TdhOutputType.CodePointer)]
+        [InlineData(FormatHint.Pointer, TdhInputType.UInt64, TdhOutputType.CodePointer)]
+        // HexIntXX input types are hex formatted even if there is no output hint
+        [InlineData(FormatHint.Hex, TdhInputType.HexInt32, TdhOutputType.Null)]
+        [InlineData(FormatHint.Hex, TdhInputType.HexInt64, TdhOutputType.Null)]
+        public void ComputeFormatHintFromInOutTypes_MapsToExpectedFormatHint(object expected, object inType, object outType)
+        {
+            // The values are passed as object to avoid CS0051: "Inconsistent accessibility:
+            // parameter type 'X' is less accessible than method 'Y'"
+            Assert.Equal((FormatHint)expected, DynamicTraceEventData.PayloadFetch.ComputeFormatHintFromInOutTypes((TdhInputType)inType, (TdhOutputType)outType));
+        }
+
+        [Fact]
+        public void StructValue_ToString_AppliesScalarFormattingHints()
+        {
+            var fieldFetches = new[]
+            {
+                new DynamicTraceEventData.PayloadFetch(0, TdhInputType.UInt16, TdhOutputType.UnsignedShort),
+                new DynamicTraceEventData.PayloadFetch(2, TdhInputType.UInt32, TdhOutputType.HexInt32),
+            };
+            var value = new DynamicTraceEventData.StructValue(fieldFetches);
+            value.Add("UInt16Field", (Int16)42);
+            value.Add("UInt32HexField", unchecked((Int32)0xDEADBEEF));
+
+            Assert.Equal(
+                "{ \"UInt16Field\":\"42\", \"UInt32HexField\":\"0xDEADBEEF\" }",
+                value.ToString());
+        }
+
+        [Fact]
+        public void StructValue_ToString_AppliesNestedFormattingHints()
+        {
+            var innerFieldFetches = new[]
+            {
+                new DynamicTraceEventData.PayloadFetch(0, TdhInputType.Int32, TdhOutputType.HResult),
+            };
+            var innerClassInfo = new DynamicTraceEventData.PayloadFetchClassInfo
+            {
+                FieldNames = new[] { "InnerError" },
+                FieldFetches = innerFieldFetches,
+            };
+            DynamicTraceEventData.PayloadFetch innerFetch =
+                DynamicTraceEventData.PayloadFetch.StructPayloadFetch(0, innerClassInfo);
+            DynamicTraceEventData.PayloadFetch innerArrayFetch =
+                DynamicTraceEventData.PayloadFetch.FixedCountArrayPayloadFetch(0, innerFetch, 2);
+
+            var firstArrayElement = new DynamicTraceEventData.StructValue(innerFieldFetches);
+            firstArrayElement.Add("InnerError", unchecked((Int32)0x80004005));
+            var secondArrayElement = new DynamicTraceEventData.StructValue(innerFieldFetches);
+            secondArrayElement.Add("InnerError", 0);
+            var child = new DynamicTraceEventData.StructValue(innerFieldFetches);
+            child.Add("InnerError", unchecked((Int32)0x80070005));
+
+            var value = new DynamicTraceEventData.StructValue(new[] { innerArrayFetch, innerFetch });
+            value.Add("ArrayOfInner", new[] { firstArrayElement, secondArrayElement });
+            value.Add("ChildOfInner", child);
+
+            Assert.Equal(
+                "{ \"ArrayOfInner\":[ { \"InnerError\":\"0x80004005\" }, { \"InnerError\":\"0x00000000\" } ], \"ChildOfInner\":{ \"InnerError\":\"0x80070005\" } }",
+                value.ToString());
         }
 
         private static ProviderManifest CreateProviderManifest(string providerName, Guid providerGuid)
