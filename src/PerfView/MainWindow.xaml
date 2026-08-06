@@ -178,7 +178,7 @@
                 <DockPanel DockPanel.Dock="Top">
                     <Label x:Name="DirectoryLabel" Content="Path:" Target="{Binding ElementName=Directory}"
                            VerticalAlignment="Center" Padding="5,0" />
-                    <controls:HistoryComboBox x:Name="Directory" AutomationProperties.Name="Path"
+                    <controls:HistoryComboBox x:Name="Directory" AutomationProperties.Name="Directory Search Bar"
                              AutomationProperties.LabeledBy="{Binding ElementName=DirectoryLabel}"
                              ToolTip="This is the directory to search for performance data files." TextEntered="DoTextEnteredInDirectoryTextBox" />
                 </DockPanel>
