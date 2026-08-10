@@ -1,8 +1,9 @@
 //     Copyright (c) Microsoft Corporation.  All rights reserved.
 using FastSerialization;
-using Microsoft.Diagnostics.Tracing.Compatibility;
+
 using Microsoft.Diagnostics.Tracing.EventPipe;
 using Microsoft.Diagnostics.Utilities;
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,6 +12,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
+
 using Address = System.UInt64;
 
 namespace Microsoft.Diagnostics.Tracing.Parsers
@@ -521,7 +523,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             PayloadFetchClassInfo classInfo = payloadFetch.Class;
             if (classInfo != null)
             {
-                var ret = new StructValue(classInfo.FieldFetches.Length);
+                var ret = new StructValue(classInfo.FieldFetches);
 
                 for (int i = 0; i < classInfo.FieldFetches.Length; i++)
                 {
@@ -780,9 +782,10 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
         /// </summary>
         internal class StructValue : IDictionary<string, object>
         {
-            internal StructValue(int capacity = 0)
+            internal StructValue(PayloadFetch[] fieldFetches)
             {
-                m_values = new List<KeyValuePair<string, object>>(capacity);
+                m_fieldFetches = fieldFetches ?? throw new ArgumentNullException(nameof(fieldFetches));
+                m_values = new List<KeyValuePair<string, object>>(fieldFetches.Length);
             }
             public IEnumerator<KeyValuePair<string, object>> GetEnumerator() { return m_values.GetEnumerator(); }
             System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() { return m_values.GetEnumerator(); }
@@ -825,71 +828,94 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                 return WriteAsJSon(new StringBuilder(), this).ToString();
             }
 
-            private static StringBuilder WriteAsJSon(StringBuilder sb, object value)
+            private static StringBuilder WriteAsJSon(StringBuilder sb, StructValue value)
             {
-                var asStructValue = value as StructValue;
-                if (asStructValue != null)
+                Debug.Assert(value.m_values.Count == value.m_fieldFetches.Length);
+                sb.Append("{ ");
+                bool first = true;
+                for (int i = 0; i < value.m_values.Count; i++)
                 {
-                    sb.Append("{ ");
-                    bool first = true;
-                    foreach (var keyvalue in asStructValue)
+                    if (!first)
                     {
-                        if (!first)
-                        {
-                            sb.Append(", ");
-                        }
-                        else
-                        {
-                            first = false;
-                        }
-
-                        sb.Append("\"");
-                        Quote(sb, keyvalue.Key);
-                        sb.Append("\":");
-                        WriteAsJSon(sb, keyvalue.Value);
+                        sb.Append(", ");
                     }
-                    sb.Append(" }");
-                    return sb;
-                }
-
-                var asArray = value as System.Array;
-                if (asArray != null && asArray.Rank == 1)
-                {
-                    sb.Append("[ ");
-                    bool first = true;
-                    for (int i = 0; i < asArray.Length; i++)
+                    else
                     {
-                        if (!first)
-                        {
-                            sb.Append(", ");
-                        }
-                        else
-                        {
-                            first = false;
-                        }
-
-                        WriteAsJSon(sb, asArray.GetValue(i));
+                        first = false;
                     }
-                    sb.Append(" ]");
-                    return sb;
-                }
 
-                if (value is int || value is bool || value is double || value is float)
-                {
-                    sb.Append(value);
-                    return sb;
-                }
-                else if (value == null)
-                {
-                    sb.Append("null");
-                }
-                else
-                {
+                    KeyValuePair<string, object> keyvalue = value.m_values[i];
                     sb.Append("\"");
-                    Quote(sb, value.ToString());
-                    sb.Append("\"");
+                    Quote(sb, keyvalue.Key);
+                    sb.Append("\":");
+                    AppendField(sb, keyvalue.Value, value.m_fieldFetches[i]);
                 }
+                sb.Append(" }");
                 return sb;
+
+                static void AppendField(StringBuilder sb, object value, PayloadFetch payloadFetch)
+                {
+                    var asStructValue = value as StructValue;
+                    if (asStructValue != null)
+                    {
+                        WriteAsJSon(sb, asStructValue);
+                        return;
+                    }
+
+                    if (payloadFetch.FormatHint != TdhFormatter.FormatHint.None)
+                    {
+                        string formatted = TdhFormatter.Format(value, payloadFetch.FormatHint);
+                        if (formatted != null)
+                        {
+                            sb.Append("\"");
+                            Quote(sb, formatted);
+                            sb.Append("\"");
+                            return;
+                        }
+                    }
+
+                    var asArray = value as System.Array;
+                    if (asArray != null && asArray.Rank == 1)
+                    {
+                        PayloadFetchArrayInfo arrayInfo = payloadFetch.Array;
+                        if (arrayInfo == null)
+                        {
+                            throw new InvalidOperationException("Array value requires array payload metadata.");
+                        }
+
+                        sb.Append("[ ");
+                        bool first = true;
+                        for (int i = 0; i < asArray.Length; i++)
+                        {
+                            if (!first)
+                            {
+                                sb.Append(", ");
+                            }
+                            else
+                            {
+                                first = false;
+                            }
+
+                            AppendField(sb, asArray.GetValue(i), arrayInfo.Element);
+                        }
+                        sb.Append(" ]");
+
+                    }
+                    else if (value is int || value is bool || value is double || value is float)
+                    {
+                        sb.Append(value);
+                    }
+                    else if (value == null)
+                    {
+                        sb.Append("null");
+                    }
+                    else
+                    {
+                        sb.Append("\"");
+                        Quote(sb, value.ToString());
+                        sb.Append("\"");
+                    }
+                }
             }
 
             #region private
@@ -924,7 +950,8 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             public void CopyTo(KeyValuePair<string, object>[] array, int arrayIndex) { throw new NotImplementedException(); }
             public bool Remove(KeyValuePair<string, object> item) { throw new NotImplementedException(); }
 
-            private List<KeyValuePair<string, object>> m_values;
+            private readonly PayloadFetch[] m_fieldFetches;
+            private readonly List<KeyValuePair<string, object>> m_values;
             #endregion
         }
 
@@ -946,7 +973,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
         /// </summary>
         public override string PayloadString(int index, IFormatProvider formatProvider = null)
         {
-            // See if you can do enumeration mapping.  
+            // See if you can do enumeration mapping.
             var map = payloadFetches[index].Map;
             if (map != null)
             {
@@ -1014,9 +1041,42 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                 }
             }
 
-            // Otherwise do the default transformations. 
+            // Otherwise apply any TraceLogging formatting hints
+            string hinted = FormatWithHint(index, formatProvider);
+            if (hinted != null)
+            {
+                return hinted;
+            }
+
+            // Otherwise do the default transformations.
             return base.PayloadString(index, formatProvider);
         }
+
+        /// <summary>
+        /// Applies the field's <see cref="TdhFormatter.FormatHint"/> hint to the value at <paramref
+        /// name="index"/>. Returns the formatted string, or null if no hint applies.
+        /// </summary>
+        private string FormatWithHint(int index, IFormatProvider formatProvider)
+        {
+            TdhFormatter.FormatHint format = payloadFetches[index].FormatHint;
+
+            // For arrays the hint lives on the element, not on the array itself.
+            TdhFormatter.FormatHint? elementFormat = null;
+            if (format == TdhFormatter.FormatHint.None)
+            {
+                elementFormat = payloadFetches[index].Array?.Element.FormatHint;
+            }
+
+            // If no hint applies, don't fetch the value to just ignore it.
+            if (format == TdhFormatter.FormatHint.None && elementFormat.GetValueOrDefault(TdhFormatter.FormatHint.None) == TdhFormatter.FormatHint.None)
+            {
+                return null;
+            }
+
+            object value = PayloadValue(index);
+            return TdhFormatter.Format(value, format, elementFormat, formatProvider);
+        }
+
         /// <summary>
         /// Implements TraceEvent interface
         /// </summary>
@@ -1483,6 +1543,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                 Size = size;
                 Type = type;
                 info = map;
+                FormatHint = TdhFormatter.FormatHint.None;
             }
 
             /// <summary>
@@ -1490,10 +1551,11 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             /// if the type is unknown.  
             /// </summary>
 
-            public PayloadFetch(ushort offset, RegisteredTraceEventParser.TdhInputType inType, int outType)
+            public PayloadFetch(ushort offset, RegisteredTraceEventParser.TdhInputType inType, RegisteredTraceEventParser.TdhOutputType outType)
             {
                 Offset = offset;
                 info = null;
+                FormatHint = ComputeFormatHintFromInOutTypes(inType, outType);
 
                 switch (inType)
                 {
@@ -1506,7 +1568,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                         Size = DynamicTraceEventData.NULL_TERMINATED | DynamicTraceEventData.IS_ANSI;
                         break;
                     case RegisteredTraceEventParser.TdhInputType.UInt8:
-                        if (outType == 13)       // Encoding for boolean
+                        if (outType == RegisteredTraceEventParser.TdhOutputType.Boolean)
                         {
                             Type = typeof(bool);
                             Size = 1;
@@ -1522,7 +1584,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
                     case RegisteredTraceEventParser.TdhInputType.Int16:
                     case RegisteredTraceEventParser.TdhInputType.UInt16:
                         Size = 2;
-                        if (outType == 1)       // Encoding for String
+                        if (outType == RegisteredTraceEventParser.TdhOutputType.String)
                         {
                             Type = typeof(char);
                             break;
@@ -1594,6 +1656,62 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             private static bool ArrayElementCanProjectToString(PayloadFetch element)
             {
                 return element.Type == typeof(char) && (element.Size == 1 || element.Size == 2);
+            }
+
+            /// <summary>
+            /// Maps a TraceLogging field's <see cref="RegisteredTraceEventParser.TdhInputType"/>
+            /// and <see cref="RegisteredTraceEventParser.TdhOutputType"/> values to a <see
+            /// cref="TdhFormatter.FormatHint"/> hint.
+            /// </summary>
+            /// <remarks>
+            /// This method doesn't validate that <paramref name="inType"/> can be rendered as the
+            /// requested <paramref name="outType"/>. Instead, formatting code handles those cases,
+            /// typically by returning null so that fallback formatting will run.
+            /// </remarks>
+            internal static TdhFormatter.FormatHint ComputeFormatHintFromInOutTypes(RegisteredTraceEventParser.TdhInputType inType, RegisteredTraceEventParser.TdhOutputType outType)
+            {
+                switch (outType)
+                {
+                    case RegisteredTraceEventParser.TdhOutputType.HexInt8:
+                    case RegisteredTraceEventParser.TdhOutputType.HexInt16:
+                    case RegisteredTraceEventParser.TdhOutputType.HexInt32:
+                    case RegisteredTraceEventParser.TdhOutputType.HexInt64:
+                        // Use pointer formatting for hex types, even if the output type is different.
+                        // This maintains compatibility with the existing formatting logic.
+                        return inType == RegisteredTraceEventParser.TdhInputType.Pointer ? TdhFormatter.FormatHint.Pointer : TdhFormatter.FormatHint.Hex;
+                    case RegisteredTraceEventParser.TdhOutputType.Pid:
+                        return TdhFormatter.FormatHint.Pid;
+                    case RegisteredTraceEventParser.TdhOutputType.Tid:
+                        return TdhFormatter.FormatHint.Tid;
+                    case RegisteredTraceEventParser.TdhOutputType.Port:
+                        return TdhFormatter.FormatHint.Port;
+                    case RegisteredTraceEventParser.TdhOutputType.Ipv4:
+                        return TdhFormatter.FormatHint.IPv4;
+                    case RegisteredTraceEventParser.TdhOutputType.Ipv6:
+                        return TdhFormatter.FormatHint.IPv6;
+                    case RegisteredTraceEventParser.TdhOutputType.SocketAddress:
+                        return TdhFormatter.FormatHint.SocketAddress;
+                    case RegisteredTraceEventParser.TdhOutputType.ErrorCode:
+                        return TdhFormatter.FormatHint.GenericError;
+                    case RegisteredTraceEventParser.TdhOutputType.Win32Error:
+                        return TdhFormatter.FormatHint.Win32Error;
+                    case RegisteredTraceEventParser.TdhOutputType.NtStatus:
+                        return TdhFormatter.FormatHint.NtStatus;
+                    case RegisteredTraceEventParser.TdhOutputType.HResult:
+                        return TdhFormatter.FormatHint.HResult;
+                    case RegisteredTraceEventParser.TdhOutputType.CodePointer:
+                        return TdhFormatter.FormatHint.Pointer;
+                }
+
+                // Some input types imply a format, so check those after checking outType.
+                switch (inType)
+                {
+                    case RegisteredTraceEventParser.TdhInputType.HexInt32:
+                    case RegisteredTraceEventParser.TdhInputType.HexInt64:
+                        return TdhFormatter.FormatHint.Hex;
+                }
+
+                return TdhFormatter.FormatHint.None;
             }
 
             /// <summary>
@@ -1734,6 +1852,9 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
 
             public Type Type;       // Currently null for arrays.  
 
+            // Display-formatting hint derived from the TraceLogging/TDH InType/OutType.
+            public TdhFormatter.FormatHint FormatHint { get; set; }
+
             // Non null of 'Type' is a enum
             public IDictionary<long, string> Map
             {
@@ -1818,6 +1939,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             {
                 serializer.Write((short)Offset);
                 serializer.Write((short)Size);
+                serializer.Write((byte)FormatHint);
                 if (Type == null)
                 {
                     serializer.Write((string)null);
@@ -1881,6 +2003,7 @@ namespace Microsoft.Diagnostics.Tracing.Parsers
             {
                 Offset = (ushort)deserializer.ReadInt16();
                 Size = (ushort)deserializer.ReadInt16();
+                FormatHint = (TdhFormatter.FormatHint)deserializer.ReadByte();
                 var typeName = deserializer.ReadString();
                 if (typeName != null)
                 {

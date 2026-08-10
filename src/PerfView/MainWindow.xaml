@@ -58,8 +58,13 @@
     <Window.InputBindings>
         <KeyBinding Gesture="CTRL+L" Command="{x:Static src:MainWindow.FocusDirectoryCommand}" />
     </Window.InputBindings>
-    <DockPanel>
-        <Grid DockPanel.Dock="Top">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition/>
@@ -167,16 +172,20 @@
             <Button Name="WikiButton" Grid.Column="7" Margin="5,1,10,1" Content="Wiki" FontSize="9"
                     ToolTip="Goto the PerfView Wiki." Click="DoWikiClick"/>
         </Grid>
-        <src:StatusBar x:Name="StatusBar" DockPanel.Dock="Bottom"/>
-        <Grid>
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220*"/>
                 <ColumnDefinition Width="auto"/>
                 <ColumnDefinition Width="619*"/>
             </Grid.ColumnDefinitions>
             <DockPanel Background="{DynamicResource ContainerBackground}" Grid.Column="0">
-                <controls:HistoryComboBox x:Name="Directory" DockPanel.Dock="Top" AutomationProperties.Name="Directory Search Bar"
-                         ToolTip="This is the directory to search for performance data files." TextEntered="DoTextEnteredInDirectoryTextBox" />
+                <DockPanel DockPanel.Dock="Top">
+                    <Label x:Name="DirectoryLabel" Content="Path:" Target="{Binding ElementName=Directory}"
+                           VerticalAlignment="Center" Padding="5,0" />
+                    <controls:HistoryComboBox x:Name="Directory" AutomationProperties.Name="Directory Search Bar"
+                             AutomationProperties.LabeledBy="{Binding ElementName=DirectoryLabel}"
+                             ToolTip="This is the directory to search for performance data files." TextEntered="DoTextEnteredInDirectoryTextBox" />
+                </DockPanel>
                 <Grid DockPanel.Dock="Top" >
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -227,12 +236,15 @@
             <GridSplitter Grid.Column="1" Width="3"  HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
             <RichTextBox Name="Body" Grid.Column="2" IsReadOnly="True" IsDocumentEnabled="True"
                          IsEnabled="{Binding ElementName=StatusBar, Path=IsNotWorking}"
+                         FocusVisualStyle="{DynamicResource AccessibleFocusVisual}"
                          VerticalScrollBarVisibility="auto" AutomationProperties.Name="Usage Information">
                 <RichTextBox.Resources>
                     <Style TargetType="{x:Type Paragraph}">
                         <Setter Property="Margin" Value="0"/>
                     </Style>
-
+                    <Style TargetType="{x:Type Hyperlink}" BasedOn="{StaticResource {x:Type Hyperlink}}">
+                        <Setter Property="FocusVisualStyle" Value="{DynamicResource AccessibleFocusVisual}"/>
+                    </Style>
                 </RichTextBox.Resources>
                 <RichTextBox.Document>
                     <FlowDocument>
@@ -345,5 +357,6 @@
                 </RichTextBox.Document>
             </RichTextBox>
         </Grid>
-    </DockPanel>
+        <src:StatusBar x:Name="StatusBar" Grid.Row="2"/>
+    </Grid>
 </Window>
