@@ -7685,7 +7685,7 @@ namespace PerfView
                 if (App.UserConfigData["WarnedAboutOsHeapAllocTypes"] == null)
                 {
                     XamlMessageBox.Show(
-                        stackWindow,
+                        stackWindow.ParentWindow,
                         """
                         Warning: Allocation type resolution only happens on window launch.
                         Thus if you manually lookup symbols in this view you will get method
